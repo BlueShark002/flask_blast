@@ -1,1 +1,255 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>blast网页版</title>
+    <style>
+        .param-set>*{
+            padding: 5px;
+            font-size:25px;
+        }
+        option{
+            font-size:20px;
+        }
+        .hit-item:hover{
+            background-color:PapayaWhip;
+        }
+        .hit-item{
+            margin:5px;
+        }
+        .db-type-select>*{
+            font-size:22px;
+            padding:5px;
+        }
+        .main-contain{
+            background-color: whitesmoke;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-contain">
+        <div style="padding: 20px;"  class="head-title">
+            <h1 style="margin:0px;padding:0px;text-align: center;">flask实例-blast网页版</h1>
+            <p style="color: gray;font-size: 18px;text-align: center;border-bottom:1px solid #D3D3D3;">biomannote.cn</p>
+        </div>
+        <form id="blast-form">
+            <!-- 输入序列 -->
+            <div class="input-seqs">
+                <h2>输入比对序列</h2>
+                <textarea style="font-size:25px;width: 80%;" placeholder=">fasta seq" name="seqs" id="" cols="80" rows="10"></textarea>
+            </div>
+            <div class="param-set">
+                <h2>参数设置</h2>
+                <div class="evalue">
+                    <span>E值</span>
+                    <select name="evalue" id="">
+                        <option value="0.00001">0.00001</option>
+                        <option value="0.0001">0.0001</option>
+                        <option value="0.001">0.001</option>
+                    </select>
+                </div>
+                <div class="max-num">
+                    <span>最大输出数目</span>
+                    <select name="hit-num" id="">
+                        <option value="10">10</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+                <div class="blast-type">
+                    <span>比对类型</span>
+                    <input type="radio" id="prot" name="dbtype" value="prot" checked />
+                    <label for="prot">protein</label>
+                    <input type="radio" id="nucl" name="dbtype" value="nucl" checked />
+                    <label for="nucl">nucl</label>
+                </div>
+                <div class="db-select-set">
+                    <span>比对数据库</span>
+                    <option id="db-select-tmp" style="display: none;" value="tmp">choose a db</option>
+                    <select name="db-select" id="db-select">
+                    </select><br>
+                </div>
+            </div>
+        </form>
+        <form id="upload-db-form">
+            <div class="upload-db">
+                <!-- <h2>上传比对数据库，可选操作</h2> -->
+                <fieldset style="width: 50%;">
+                    <legend style="font-size:25px;color:gray;">上传比对数据库，可选操作</legend>
+                    <label style="font-size:22px;">上传fasta文件</label>
+                    <input id="db-file-btn" style="margin:5px;" type="file" name="db-file">
+                    <div class="db-type-select">
+                        <span>数据类型</span>
+                        <input type="radio" id="prot" name="dbtype" value="prot" checked />
+                        <label for="prot">protein</label>
+                        <input type="radio" id="nucl" name="dbtype" value="nucl" checked />
+                        <label for="nucl">nucl</label>
+                    </div>
+                    <label style="font-size:22px;">数据库命名</label><input placeholder="name" name="db-name" type="text" style="font-size:22px;">
+                    <label style="font-size:22px;color: gray;">格式species_CDS/prot/genome</label>
+                </fieldset>
+            </div>
+        </form>
+        <button style="font-size:25px;margin:5px;" onclick="exec_blast()">Start blast</button>
+        <button style="font-size:25px;margin:5px;" onclick="upload_db()">Upload fasta</button>
+    </div>
+    <div class="blast-results">
+        <h1 style="text-align: center;border-bottom:1px solid #D3D3D3;">blast结果</h1>
+        <h2 style="text-align: center;" id="count-results"></h2>
+        <div class="wait-block-frame" style="display:flex;flex-direction: column;justify-content:center;align-items:center;">
+            <div class="wait-block" style="display: none;width: 50px;height:50px;background-color: deepskyblue;"></div>
+            <h3 class="wait-block-mes" style="color: black;"></h3>
+        </div>
+        <!-- <div style="width:10%;border-bottom:1px solid black;text-align: center;"></div> -->
+        <div id="blast-item-tmp" style="display: none;">
+            <h2 class="hit-item" style="display:inline-block;cursor:pointer;" >hit1 ident=80% cov=100%</h2>
+            <div class="hit-align" style="display:none;">
+                <p style="font-size:22px;">
+                    Sbjct ID=<span style="font-weight:bold;color:black" id="hit-item-id"></span> <br> evalue = <span id="hit-item-evalue" style="color:#00BFFF;"></span>
+                </p>
+                <textarea cols="80" id="blast-align" style="min-width:60vw;overflow-x:scroll;overflow-y:scroll;height: 400px;resize:none;font-size:25px" disabled></textarea>
+            </div>
+        </div>
+        <div class="blast-items" style="min-height:400px;"></div>
+    </div>
+</body>
+<script src="/static/js/jquery-3.7.0.min.js"></script>
+<script>
+// ----------------------------------
+// wait logo set
+// wait logo rotate
+function waitBlock(){
+    $(".wait-block").css({'transform': 'rotate(' + (++DEGREE % 360) + 'deg)'});
+    DEGREE = DEGREE>=360?0:DEGREE
+}
+var DEGREE = 0; //main var
+// open wait logo
+function wait_block_show(mes){
+    $(".wait-block-mes").text("");
+    $(".wait-block").fadeIn("slow");
+    $(".wait-block-mes").text(mes);
+}
+// close wait logo
+function wait_block_hide(){
+    $(".wait-block-mes").text("");
+    $(".wait-block").fadeOut("slow");
+}
 
+// -----------------------------
+// 上传fasta数据，建库
+function upload_db(){
+    console.log($("#upload-db-form").serialize());
+    var formdata = new FormData($('#upload-db-form')[0]);
+    console.log(formdata);
+    wait_block_show("Making db...");
+    $.ajax({
+        type: "post",
+        url:"/api/upload_db",
+        data:formdata,
+        processData: false,
+        contentType: false,
+        success:function(res){
+            console.log(res);
+            if(res["success"]==1){
+                init_blast_db();
+                alert('Success: '+res["mes"]);
+            }else{
+                alert('Error:'+res["mes"]);
+            }
+            wait_block_hide();
+            // show_blast_results(res["data"]);
+            // $("#blast-align").val(res["mes"]);
+        },
+        error:function(res){
+            console.error(res);
+        }
+    });
+    return false;
+}
+
+// 展示blast结果
+function show_blast_results(data){
+    var contain_tag = $(".blast-items");
+    $("#count-results").text(`${data["hit_id"].length} results found, query seq len=${data["query_len"]}`);
+    for(var i=0;i<data["hit_id"].length;i++){
+        var tmp = $("#blast-item-tmp").clone(true);
+        tmp.show();
+        contain_tag.append(tmp);
+        tmp.attr("class","blast-item");
+        // 
+        var title = tmp.children().eq(0);
+        var textarea = tmp.children().eq(1).children().eq(1);
+        var item_id = tmp.children().eq(1).children().eq(0).children().eq(0);
+        var item_e = item_id.next().next();
+        title.text(`index ${i+1} ident=${data["ident"][i]} cov=${data["query_cov"][i]}`);
+        textarea.val("\n\n"+data["align_str"][i]);
+        item_id.text(data["hit_id"][i]);
+        item_e.text(data["evalue"][i]);
+    }
+    return false;
+}
+
+// 执行blast
+function exec_blast(){
+    // $("#blast-align").val("");
+    $(".blast-items").empty();
+    $("#count-results").text(""); 
+    wait_block_show("Start blast...");
+    $.ajax({
+        type: "post",
+        url:"/api/start_blast",
+        data:$("#blast-form").serialize(),
+        success:function(res){
+            console.log(res);
+            wait_block_hide();
+            if(res["success"]==0){
+                alert("Error"+res["mes"]);
+                return
+            }
+            show_blast_results(res["data"]);
+            // $("#blast-align").val(res["mes"]);
+        },
+        error:function(res){
+            console.error(res);
+        }
+    })
+    return false;
+}
+
+// 初始化本地已经建立的数据库列表
+function init_blast_db_list(data){
+    var db_tag = $("#db-select");
+    db_tag.empty();
+    for(var i=0;i<data["db_list"].length;i++){
+        var tmp = $("#db-select-tmp").clone(true);
+        tmp.attr("value",data["db_list"][i]);
+        tmp.text(data["db_list"][i]);
+        tmp.show();
+        db_tag.append(tmp);
+    }
+}
+// 查询本地已经建立的数据库
+function init_blast_db(){
+    $.ajax({
+        type: "post",
+        url:"/api/get_blastdb",
+        // data:$("form").serialize(),
+        success:function(res){
+            console.log(res);
+            init_blast_db_list(res);
+        },
+        error:function(res){
+            error.log(res)
+        }
+    })
+}
+
+$(function(){
+    init_blast_db(); //先请求数据库列表
+    $(".hit-item").click(function(){
+        $(this).next().slideToggle("slow");
+    }); // blast结果点击展开事件
+    setInterval(waitBlock, 10); // wait logo开始旋转
+})
+
+</script>
+</html>
