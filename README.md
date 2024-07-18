@@ -1,0 +1,2 @@
+# flask_blast
+使用flask和blast开发了一款基于浏览器UI的序列比对工具
